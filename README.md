@@ -22,11 +22,11 @@ Because THE SHOVEL uses standard libraries, the installation process is instant.
 
 1.  **Clone the repository:**
     ```bash
-    git clone [https://github.com/YOUR-USERNAME/the-shovel.git](https://github.com/YOUR-USERNAME/the-shovel.git)
+    git clone https://github.com/Atsukiiii01/The-Shovel.git
     ```
 2.  **Navigate to the directory:**
     ```bash
-    cd the-shovel
+    cd The-Shovel
     ```
 
 ## 🛠 Usage
@@ -34,10 +34,10 @@ Because THE SHOVEL uses standard libraries, the installation process is instant.
 Run the script directly using Python:
 
 ```bash
-python shovel.py
+python Shovel.py
 
 
-## Operational Modes
+Operational Modes
 
 Input Target: Enter the domain or keyword you wish to investigate.
 
