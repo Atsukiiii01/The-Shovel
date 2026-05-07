@@ -4,3 +4,6 @@ venv/
 reports/
 *.html
 .env
+*.db
+*.sqlite
+*_recon.json

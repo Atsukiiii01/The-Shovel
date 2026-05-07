@@ -1,15 +1,15 @@
 {
-    "🌐 Infrastructure & Recon": [
+    " Infrastructure & Recon": [
       "site:{target} intitle:\"index of\"",
       "site:{target} inurl:api OR inurl:v1 OR inurl:v2",
       "related:{target}"
     ],
-    "📂 Public Files & Leaks": [
+    " Public Files & Leaks": [
       "site:{target} ext:sql OR ext:dbf OR ext:env",
       "site:{target} ext:xml OR ext:conf OR ext:cnf OR ext:reg OR ext:inf",
       "site:{target} ext:pdf OR ext:xlsx \"confidential\""
     ],
-    "🔐 Admin Portals & Login": [
+    " Admin Portals & Login": [
       "site:{target} inurl:login OR inurl:admin",
       "site:{target} inurl:wp-admin",
       "site:{target} intitle:\"login\" -inurl:https"
