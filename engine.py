@@ -1,6 +1,7 @@
 import json
 import os
 import requests
+import concurrent.futures
 from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
 import urllib3
@@ -82,8 +83,42 @@ class ShovelEngine:
 
         return sorted(list(subdomains))
 
+    def probe_subdomain(self, subdomain):
+        """Worker function to probe a single subdomain."""
+        headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) Shovel-OSINT/3.0'}
+        try:
+            urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+            # Use a strict 5-second timeout. If a server takes longer, it's not a viable target right now.
+            response = requests.get(f"http://{subdomain}", headers=headers, timeout=5, verify=False, allow_redirects=True)
+            return {
+                "subdomain": subdomain,
+                "status": response.status_code,
+                "server": response.headers.get("Server", "Unknown"),
+                "redirects_to": response.url if response.history else "None"
+            }
+        except requests.exceptions.RequestException:
+            return {"subdomain": subdomain, "status": "DEAD", "server": "N/A", "redirects_to": "N/A"}
+
+    def mass_fingerprint(self, subdomains, max_threads=15):
+        """Spins up multiple threads to concurrently probe an array of subdomains."""
+        # Filter out error messages if the enumeration failed
+        valid_subs = [s for s in subdomains if not s.startswith("Error")]
+        if not valid_subs: return []
+
+        results = []
+        # ThreadPoolExecutor is the professional standard for concurrent I/O operations
+        with concurrent.futures.ThreadPoolExecutor(max_workers=max_threads) as executor:
+            future_to_sub = {executor.submit(self.probe_subdomain, sub): sub for sub in valid_subs}
+            for future in concurrent.futures.as_completed(future_to_sub):
+                try:
+                    results.append(future.result())
+                except Exception as e:
+                    pass
+
+        # Sort the results: Live endpoints first, Dead endpoints last
+        return sorted(results, key=lambda x: (x['status'] == "DEAD", x['subdomain']))
+
     def shodan_recon(self, ip, api_key):
-        """Passively maps infrastructure and open ports via Shodan API."""
         if not api_key:
             return {"Error": "No Shodan API key provided."}
         
@@ -100,8 +135,10 @@ class ShovelEngine:
                 }
             elif response.status_code == 401:
                 return {"Error": "Invalid Shodan API key."}
+            elif response.status_code == 403:
+                return {"Error": "Access Denied. Check Shodan account tier and query credits."}
             elif response.status_code == 404:
-                return {"Error": "No data found for this IP on Shodan (Target might be protected by WAF/CDN)."}
+                return {"Error": "No data found for this IP on Shodan."}
             else:
                 return {"Error": f"Shodan API returned status code: {response.status_code}"}
         except requests.exceptions.RequestException as e:

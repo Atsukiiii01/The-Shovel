@@ -65,7 +65,8 @@ def main():
             
     console.print(f"[+] Target Validated: {target} resolves to {target_ip}", style="bold green")
 
-    with console.status(f"[bold green]Executing Active & Passive Reconnaissance...", spinner="bouncingBar"):
+    # Expand the spinner to cover the new threaded process
+    with console.status(f"[bold green]Executing Reconnaissance & Mass Fingerprinting...", spinner="bouncingBar"):
         db = DatabaseManager()
         engine = ShovelEngine()
         
@@ -73,6 +74,9 @@ def main():
         header_data = engine.analyze_headers(target)
         dork_data = engine.generate_queries(target)
         subdomains = engine.enumerate_subdomains(target)
+        
+        # Run the concurrent fingerprinter on the discovered subdomains
+        fingerprint_data = engine.mass_fingerprint(subdomains)
         
         shodan_data = None
         if args.shodan:
@@ -84,7 +88,6 @@ def main():
     header_table = Table(title="[ACTIVE RECON] Server Infrastructure & Security Headers", title_style="bold yellow", border_style="yellow")
     header_table.add_column("Header Directive", style="cyan", justify="right")
     header_table.add_column("Value", style="white")
-    
     for key, value in header_data.items():
         val_style = "bold red" if value == "MISSING" else "white"
         header_table.add_row(key, f"[{val_style}]{value}[/{val_style}]")
@@ -99,16 +102,12 @@ def main():
             shodan_table = Table(title=f"[PASSIVE RECON] Shodan Infrastructure Map ({target_ip})", title_style="bold green", border_style="green")
             shodan_table.add_column("Metric", style="cyan", justify="right")
             shodan_table.add_column("Data", style="white")
-            
             shodan_table.add_row("Organization", str(shodan_data.get("Organization")))
             shodan_table.add_row("Operating System", str(shodan_data.get("Operating System")))
-            
             ports = shodan_data.get("Open Ports", [])
             shodan_table.add_row("Open Ports", ", ".join(map(str, ports)) if ports else "None detected")
-            
             vulns = shodan_data.get("Vulnerabilities", [])
             shodan_table.add_row("CVE Vulnerabilities", ", ".join(vulns) if vulns else "None publicly known")
-            
             console.print(shodan_table)
             console.print("")
 
@@ -122,21 +121,32 @@ def main():
         console.print(dork_table)
         console.print("")
 
-    # --- DISPLAY PASSIVE RECON (SUBDOMAINS) ---
-    if not subdomains:
-        console.print("[!] No subdomains discovered or API returned empty results.\n", style="bold yellow")
-    elif subdomains[0].startswith("Error"):
-        console.print(f"[bold red][!] {subdomains[0]}[/bold red]\n")
+    # --- DISPLAY SUBDOMAIN FINGERPRINTING ---
+    if not fingerprint_data:
+        console.print("[!] No valid subdomains discovered to fingerprint.\n", style="bold yellow")
     else:
-        display_limit = 15
-        total_subs = len(subdomains)
-        sub_table = Table(title=f"[PASSIVE RECON] Discovered Subdomains ({total_subs} Total)", title_style="bold blue", border_style="blue")
+        live_subs = [s for s in fingerprint_data if s['status'] != "DEAD"]
+        dead_subs = len(fingerprint_data) - len(live_subs)
+        
+        sub_table = Table(title=f"[ACTIVE RECON] Live Subdomain Fingerprints ({len(live_subs)} Alive, {dead_subs} Dead/Timeouts)", title_style="bold blue", border_style="blue")
         sub_table.add_column("Subdomain", style="cyan")
-        for sub in subdomains[:display_limit]:
-            sub_table.add_row(sub)
+        sub_table.add_column("Status", style="green", justify="center")
+        sub_table.add_column("Server Tech", style="yellow")
+        sub_table.add_column("Redirect Target", style="magenta")
+        
+        display_limit = 20
+        for entry in live_subs[:display_limit]:
+            status_color = "green" if str(entry['status']).startswith('2') else "red"
+            sub_table.add_row(
+                entry['subdomain'], 
+                f"[{status_color}]{entry['status']}[/{status_color}]", 
+                entry['server'][:30], # Truncate massive server headers
+                entry['redirects_to'][:40]
+            )
+            
         console.print(sub_table)
-        if total_subs > display_limit:
-            console.print(f"[italic cyan]...and {total_subs - display_limit} more. Check JSON export for full list.[/italic cyan]")
+        if len(live_subs) > display_limit:
+            console.print(f"[italic cyan]...and {len(live_subs) - display_limit} more live hosts. Check JSON export for the full map.[/italic cyan]")
         console.print("")
 
     if args.output:
@@ -146,7 +156,7 @@ def main():
             "shodan_recon": shodan_data,
             "active_recon_headers": header_data,
             "passive_recon_dorks": dork_data,
-            "discovered_subdomains": subdomains
+            "fingerprinted_subdomains": fingerprint_data
         }
         export_file = export_results(target, master_export_payload, args.output)
         if export_file:
