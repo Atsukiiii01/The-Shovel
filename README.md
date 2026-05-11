@@ -1,55 +1,65 @@
-# THE SHOVEL 
+<div align="center">
 
-> **A Lightweight OSINT & Google Dorking Dashboard**
+# THE SHOVEL
+**OSINT Reconnaissance Engine**
 
-**THE SHOVEL** is a Python-based open-source intelligence (OSINT) tool designed to automate the generation and execution of complex Google Dorks. It features a graphical user interface (GUI) to streamline the reconnaissance phase of penetration testing and security research.
+```text
+  ___________.__             _________.__                     .__   
+  \__    ___/|  |__   ____  /   _____/|  |__   _______  __  ____|  |  
+    |    |   |  |  \_/ __ \ \_____  \ |  |  \ /  _ \  \/ /_/ __ \  |  
+    |    |   |   Y  \  ___/ /        \|   Y  (  <_> )   / \  ___/  |__
+    |____|   |___|  /\___  >_______  /|___|  /\____/ \_/   \___  >____/
+                  \/     \/        \/      \/                  \/
 
-Built entirely with the Python Standard Library, THE SHOVEL requires **no external dependencies** or installations. Just clone and run.
+A multi-layered reconnaissance framework designed for automated attack surface mapping, concurrent technology stack fingerprinting, and high-value vulnerability fuzzing. Built for speed, accuracy, and operational security.
 
----
+Core Architecture & Capabilities
 
-## ⚡ Features
+THE SHOVEL transitions from passive intelligence gathering to active, concurrent perimeter analysis within a single execution pipeline.
 
-* **Visual Dashboard:** Clean Tkinter-based GUI for easy navigation.
-* **Automated Dorking:** Pre-built logic to construct complex search queries for vulnerability discovery.
-* **HTML Reporting:** Generates structured reports of your query targets (timestamped for audit trails).
-* **Browser Integration:** seamless pivoting to your default web browser for live analysis.
-* **Zero Dependencies:** Runs on any machine with Python installed. No `pip install` required.
+Active Perimeter Analysis: Bypasses basic WAF drops with multi-protocol probing (HTTPS to HTTP fallback) to extract server infrastructure and missing security headers.
 
-## 🚀 Installation
+Passive Subdomain Enumeration: Queries Certificate Transparency logs (crt.sh) with intelligent, silent failover to HackerTarget API routing for resilient data extraction.
 
-Because THE SHOVEL uses standard libraries, the installation process is instant.
+Concurrent Mass Fingerprinting: Utilizes concurrent.futures to validate live endpoints across massive subdomain datasets in seconds, automatically filtering dead nodes and logging redirect chains.
 
-1.  **Clone the repository:**
-    ```bash
-    git clone https://github.com/Atsukiiii01/The-Shovel.git
-    ```
-2.  **Navigate to the directory:**
-    ```bash
-    cd The-Shovel
-    ```
+Calibrated Path Fuzzing: Implements strict, protocol-specific Soft-404 baseline filtering. Evaluates custom error page byte-lengths to eradicate false positives before hunting for exposed /.env, /.git/config, phpinfo.php, and server-status files.
 
-## 🛠 Usage
+Persistent Target Tracking: Local SQLite database integration automatically tracks domain scans and target history (configured to bypass Git tracking for OpSec).
 
-Run the script directly using Python:
+Structured Intelligence Export: Generates hierarchical JSON payloads for seamless ingestion into broader vulnerability management pipelines.
 
-```bash
-python Shovel.py
+*Installation*
 
+# Clone the repository
+git clone [https://github.com/Atsukiiii01/The-Shovel.git](https://github.com/Atsukiiii01/The-Shovel.git)
 
-Operational Modes
+# Navigate to directory
+cd The-Shovel
 
-Input Target: Enter the domain or keyword you wish to investigate.
+# Install requirements (requests, rich, urllib3)
+pip install -r requirements.txt
 
-Select Dorks: Choose from the available query types (e.g., exposed files, login pages, directory listing).
+*Usage*
+Execute THE SHOVEL via the command line interface.
 
-Execute: The tool will construct the query and facilitate the search or report generation.
+Standard Execution & JSON Export:
+python3 main.py -t example.com -o json
 
+Workflow Sequence:
 
-⚠️ Disclaimer
-THE SHOVEL is intended for educational purposes and authorized security testing only.
+Validates target DNS resolution.
 
-The developers assume no liability and are not responsible for any misuse or damage caused by this program. Please ensure you have explicit permission from the system owner before performing any reconnaissance or scanning activities. Use responsibly.
+Extracts core HTTP/HTTPS headers.
 
----
-*Developed by [Atsukiiii01]*
+Enumerates passive subdomains and Google Dorks.
+
+Mass-fingerprints live endpoints concurrently.
+
+Establishes Soft-404 baselines and fuzzes live endpoints for critical exposures.
+
+Exports structured intelligence to <target>_recon.json.
+
+License & Disclaimer
+THE SHOVEL is developed strictly for educational purposes and authorized offensive security reconnaissance.
+Commercial use, resale, or unauthorized copying of this architecture into other projects is strictly prohibited. The developer assumes no liability and is not responsible for any misuse or damage caused by this program. Only scan targets you have explicit permission to test.
