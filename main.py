@@ -1,3 +1,7 @@
+# LICENSE: THE SHOVEL
+# This software is developed for educational and authorized offensive security reconnaissance.
+# Commercial use or unauthorized copying of this code into other projects is strictly prohibited.
+
 import argparse
 import sys
 import socket
@@ -65,8 +69,7 @@ def main():
             
     console.print(f"[+] Target Validated: {target} resolves to {target_ip}", style="bold green")
 
-    # Expand the spinner to cover the new threaded process
-    with console.status(f"[bold green]Executing Reconnaissance & Mass Fingerprinting...", spinner="bouncingBar"):
+    with console.status(f"[bold green]Executing Mass Fingerprinting & High-Value Path Fuzzing...", spinner="bouncingBar"):
         db = DatabaseManager()
         engine = ShovelEngine()
         
@@ -75,8 +78,8 @@ def main():
         dork_data = engine.generate_queries(target)
         subdomains = engine.enumerate_subdomains(target)
         
-        # Run the concurrent fingerprinter on the discovered subdomains
         fingerprint_data = engine.mass_fingerprint(subdomains)
+        fuzzer_data = engine.active_fuzzing(fingerprint_data)
         
         shodan_data = None
         if args.shodan:
@@ -94,23 +97,6 @@ def main():
     console.print(header_table)
     console.print("")
 
-    # --- DISPLAY SHODAN INFRASTRUCTURE MAP ---
-    if shodan_data:
-        if "Error" in shodan_data:
-            console.print(f"[bold red][!] Shodan Recon Failed: {shodan_data['Error']}[/bold red]\n")
-        else:
-            shodan_table = Table(title=f"[PASSIVE RECON] Shodan Infrastructure Map ({target_ip})", title_style="bold green", border_style="green")
-            shodan_table.add_column("Metric", style="cyan", justify="right")
-            shodan_table.add_column("Data", style="white")
-            shodan_table.add_row("Organization", str(shodan_data.get("Organization")))
-            shodan_table.add_row("Operating System", str(shodan_data.get("Operating System")))
-            ports = shodan_data.get("Open Ports", [])
-            shodan_table.add_row("Open Ports", ", ".join(map(str, ports)) if ports else "None detected")
-            vulns = shodan_data.get("Vulnerabilities", [])
-            shodan_table.add_row("CVE Vulnerabilities", ", ".join(vulns) if vulns else "None publicly known")
-            console.print(shodan_table)
-            console.print("")
-
     # --- DISPLAY PASSIVE RECON (DORKS) ---
     for category, queries in dork_data.items():
         clean_category = category.encode('ascii', 'ignore').decode('ascii').strip()
@@ -127,36 +113,42 @@ def main():
     else:
         live_subs = [s for s in fingerprint_data if s['status'] != "DEAD"]
         dead_subs = len(fingerprint_data) - len(live_subs)
-        
-        sub_table = Table(title=f"[ACTIVE RECON] Live Subdomain Fingerprints ({len(live_subs)} Alive, {dead_subs} Dead/Timeouts)", title_style="bold blue", border_style="blue")
+        sub_table = Table(title=f"[ACTIVE RECON] Live Subdomain Fingerprints ({len(live_subs)} Alive, {dead_subs} Dead)", title_style="bold blue", border_style="blue")
         sub_table.add_column("Subdomain", style="cyan")
         sub_table.add_column("Status", style="green", justify="center")
         sub_table.add_column("Server Tech", style="yellow")
         sub_table.add_column("Redirect Target", style="magenta")
-        
-        display_limit = 20
-        for entry in live_subs[:display_limit]:
+        for entry in live_subs[:20]:
             status_color = "green" if str(entry['status']).startswith('2') else "red"
-            sub_table.add_row(
-                entry['subdomain'], 
-                f"[{status_color}]{entry['status']}[/{status_color}]", 
-                entry['server'][:30], # Truncate massive server headers
-                entry['redirects_to'][:40]
-            )
-            
+            sub_table.add_row(entry['subdomain'], f"[{status_color}]{entry['status']}[/{status_color}]", entry['server'][:30], entry['redirects_to'][:40])
         console.print(sub_table)
-        if len(live_subs) > display_limit:
-            console.print(f"[italic cyan]...and {len(live_subs) - display_limit} more live hosts. Check JSON export for the full map.[/italic cyan]")
         console.print("")
+
+    # --- DISPLAY ACTIVE FUZZER RESULTS ---
+    if fuzzer_data:
+        fuzz_table = Table(title=f"[VULN HUNTER] High-Value Path Exposures ({len(fuzzer_data)} Hits)", title_style="bold red", border_style="red")
+        fuzz_table.add_column("Exposed URL", style="white")
+        fuzz_table.add_column("Status", style="cyan", justify="center")
+        fuzz_table.add_column("Content Length", style="yellow", justify="right")
+        
+        for hit in fuzzer_data:
+            # 200 OK is a critical finding. 403 Forbidden means it exists but we need bypass tactics.
+            status_style = "bold red" if hit['status'] == 200 else "bold yellow"
+            fuzz_table.add_row(hit['url'], f"[{status_style}]{hit['status']}[/{status_style}]", str(hit['content_length']))
+            
+        console.print(fuzz_table)
+        console.print("")
+    else:
+        console.print("[+] Path Fuzzer found no exposed default files on live targets.\n", style="bold green")
 
     if args.output:
         master_export_payload = {
             "target": target,
             "ip_address": target_ip,
-            "shodan_recon": shodan_data,
             "active_recon_headers": header_data,
             "passive_recon_dorks": dork_data,
-            "fingerprinted_subdomains": fingerprint_data
+            "fingerprinted_subdomains": fingerprint_data,
+            "fuzzer_exposures": fuzzer_data
         }
         export_file = export_results(target, master_export_payload, args.output)
         if export_file:
