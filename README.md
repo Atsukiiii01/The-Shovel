@@ -23,7 +23,7 @@ A high-speed, concurrent OSINT framework designed for automated perimeter analys
 
 ##  Installation
 ```bash
-git clone [https://github.com/Atsukiiii01/The-Shovel.git](https://github.com/Atsukiiii01/The-Shovel.git)
+git clone https://github.com/Atsukiiii01/The-Shovel.git
 cd The-Shovel
 pip install -e .
 ```
