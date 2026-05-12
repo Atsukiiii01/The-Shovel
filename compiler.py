@@ -10,13 +10,15 @@ from rich.console import Console
 console = Console()
 
 class ReportCompiler:
-    def __init__(self, json_file):
-        self.json_file = json_file
-        self.data = self._load_data()
+    def __init__(self, data=None, json_file=None):
+        if json_file:
+            self.data = self._load_data(json_file)
+        else:
+            self.data = data or {}
 
-    def _load_data(self):
+    def _load_data(self, filepath):
         try:
-            with open(self.json_file, 'r', encoding='utf-8') as f:
+            with open(filepath, 'r', encoding='utf-8') as f:
                 return json.load(f)
         except Exception as e:
             console.print(f"[bold red][!] Failed to load JSON data: {e}[/bold red]")
@@ -27,71 +29,77 @@ class ReportCompiler:
         ip = self.data.get("ip_address", "Unknown")
         date = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         
-        md = f"# Automated Reconnaissance Assessment: {target}\n"
-        md += f"**Date of Assessment:** {date} | **Target IP:** {ip}\n\n"
+        md = f"# Security Assessment Report: {target}\n"
+        md += f"**Date:** {date} | **Primary IP:** {ip}\n\n"
         md += "---\n\n"
         
         md += "## 1. Executive Summary\n"
-        md += f"This report details the external attack surface, infrastructure footprint, and human intelligence gathered for `{target}`. The objective is to identify systemic misconfigurations, exposed sensitive endpoints, and social engineering risk profiles.\n\n"
+        md += f"High-level reconnaissance of `{target}` identified multiple critical misconfigurations. The primary risks involve **source code exposure** and **internal system disclosure** via unhardened subdomains.\n\n"
 
-        # Vulnerabilities
+        # --- VULNERABILITIES (CLEANED) ---
         fuzzer_data = self.data.get("fuzzer_exposures", [])
-        if fuzzer_data:
-            md += "## 2. High-Value Path Exposures (Critical/High Risk)\n"
-            md += "The following endpoints are exposing sensitive configuration files, internal paths, or default server status pages.\n\n"
-            md += "| URL | Status | Severity | Risk Description |\n"
-            md += "|---|---|---|---|\n"
-            for hit in fuzzer_data:
+        # Filter for actual exposures (Status 200) and ignore noise like robots.txt
+        critical_hits = [h for h in fuzzer_data if h['status'] == 200 and "robots.txt" not in h['url']]
+        
+        if critical_hits:
+            md += "## 2. Critical Information Disclosures\n"
+            md += "The following endpoints were successfully accessed (Status 200) and are leaking sensitive internal data.\n\n"
+            md += "| Severity | Vulnerable URL | Impact |\n"
+            md += "|---|---|---|\n"
+            for hit in critical_hits:
                 url = hit['url']
-                status = hit['status']
-                severity = "High" if "phpinfo" in url or ".env" in url or ".git" in url else "Medium"
-                desc = "Information Disclosure / Configuration Leak"
-                md += f"| `{url}` | {status} | **{severity}** | {desc} |\n"
+                if ".git" in url:
+                    severity, impact = "CRITICAL", "Full Source Code Disclosure"
+                elif "phpinfo" in url:
+                    severity, impact = "HIGH", "Internal Environment & Path Disclosure"
+                elif ".env" in url:
+                    severity, impact = "CRITICAL", "Credential & API Key Leakage"
+                else:
+                    severity, impact = "MEDIUM", "Information Disclosure"
+                
+                md += f"| **{severity}** | `{url}` | {impact} |\n"
             md += "\n"
+        else:
+            md += "## 2. Critical Information Disclosures\n"
+            md += "No critical file exposures (200 OK) were identified during this pass.\n\n"
 
-        # Identity OSINT
+        # --- IDENTITY ---
         identity_data = self.data.get("identity_osint", {})
         if identity_data and "contacts" in identity_data:
             contacts = identity_data["contacts"]
-            md += "## 3. Human Attack Surface & Social Engineering Risk\n"
-            md += f"Identified **{len(contacts)}** corporate identities. This intelligence dictates the organization's vulnerability to targeted spear-phishing and credential stuffing attacks.\n\n"
-            md += "| Name | Position | Department | Email |\n"
-            md += "|---|---|---|---|\n"
-            for c in contacts:
-                md += f"| {c.get('first_name')} {c.get('last_name')} | {c.get('position')} | {c.get('department')} | `{c.get('email')}` |\n"
+            md += "## 3. Personnel Intelligence\n"
+            md += f"Mapped **{len(contacts)}** key corporate identities. These targets are high-priority for spear-phishing based on their technical or executive roles.\n\n"
+            md += "| Name | Title | Email |\n"
+            md += "|---|---|---|\n"
+            for c in contacts[:10]: # Limit to top 10 for readability
+                md += f"| {c.get('first_name')} {c.get('last_name')} | {c.get('position')} | `{c.get('email')}` |\n"
             md += "\n"
 
-        # Subdomains
+        # --- INFRASTRUCTURE ---
         subdomains = self.data.get("fingerprinted_subdomains", [])
         live_subs = [s for s in subdomains if str(s.get("status")) != "DEAD"]
         if live_subs:
-            md += "## 4. Live Infrastructure Footprint\n"
-            md += f"Successfully mapped **{len(live_subs)}** live subdomains/virtual hosts.\n\n"
-            md += "| Subdomain | Status | Server Tech |\n"
+            md += "## 4. Attack Surface Footprint\n"
+            md += f"A total of **{len(live_subs)}** live assets were identified. A significant number of these are running potentially outdated `nginx` or `Apache` instances.\n\n"
+            md += "| Subdomain | Status | Tech Stack |\n"
             md += "|---|---|---|\n"
-            for s in live_subs:
+            # Show only the first 15 live ones in the report to keep it punchy
+            for s in live_subs[:15]:
                 md += f"| `{s.get('subdomain')}` | {s.get('status')} | {s.get('server')} |\n"
             md += "\n"
 
-        md += "---\n*Report generated by THE SHOVEL OSINT Framework.*\n"
+        md += "---\n*Generated by THE SHOVEL Framework.*\n"
         return md
 
     def export(self):
         target = self.data.get("target", "Unknown")
-        output_file = f"{target}_report.md"
+        output_file = f"{target}_report_v2.md"
         md_content = self.generate_markdown()
         
         try:
             with open(output_file, 'w', encoding='utf-8') as f:
                 f.write(md_content)
-            console.print(f"[bold green][+] Professional Red Team report compiled: {output_file}[/bold green]")
+            return output_file
         except Exception as e:
             console.print(f"[bold red][!] Export failed: {e}[/bold red]")
-
-if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="THE SHOVEL - Report Compiler")
-    parser.add_argument("-i", "--input", help="The raw JSON intelligence file", required=True)
-    args = parser.parse_args()
-    
-    compiler = ReportCompiler(args.input)
-    compiler.export()
+            return None

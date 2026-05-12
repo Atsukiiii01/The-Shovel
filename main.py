@@ -53,8 +53,8 @@ def main():
     )
     
     parser.add_argument("-t", "--target", help="The target domain to scan (e.g., example.com)", required=True)
-    parser.add_argument("-o", "--output", help="Export results to a file (currently supports 'json')", choices=["json"], required=False)
     parser.add_argument("-H", "--hunter", help="Hunter.io API Key for Human/Identity OSINT extraction", required=False)
+    parser.add_argument("-o", "--output", help="Export format: 'json', 'md', or 'all'", choices=["json", "md", "all"], default="all")
     
     args = parser.parse_args()
     target = args.target
@@ -115,7 +115,7 @@ def main():
             id_table.add_column("Position / Title", style="yellow")
             id_table.add_column("Department", style="green")
             
-            for c in contacts[:15]: # Show top 15 in terminal
+            for c in contacts[:15]: 
                 id_table.add_row(
                     str(c.get("email")), 
                     str(c.get("first_name")), 
@@ -169,19 +169,31 @@ def main():
     else:
         console.print("[+] Path Fuzzer found no exposed default files on live targets.\n", style="bold green")
 
-    if args.output:
-        master_export_payload = {
-            "target": target,
-            "ip_address": target_ip,
-            "active_recon_headers": header_data,
-            "identity_osint": identity_data,
-            "passive_recon_dorks": dork_data,
-            "fingerprinted_subdomains": fingerprint_data,
-            "fuzzer_exposures": fuzzer_data
-        }
-        export_file = export_results(target, master_export_payload, args.output)
+    # --- INTEGRATED EXPORT PIPELINE ---
+    master_export_payload = {
+        "target": target,
+        "ip_address": target_ip,
+        "active_recon_headers": header_data,
+        "identity_osint": identity_data,
+        "passive_recon_dorks": dork_data,
+        "fingerprinted_subdomains": fingerprint_data,
+        "fuzzer_exposures": fuzzer_data
+    }
+
+    if args.output in ["json", "all"]:
+        export_file = export_results(target, master_export_payload, "json")
         if export_file:
-            console.print(f"[+] Master results exported to {export_file}", style="bold cyan")
+            console.print(f"[+] Raw intelligence exported to {export_file}", style="bold cyan")
+            
+    if args.output in ["md", "all"]:
+        try:
+            from compiler import ReportCompiler
+            report_compiler = ReportCompiler(data=master_export_payload)
+            md_file = report_compiler.export()
+            if md_file:
+                console.print(f"[+] Executive report compiled to {md_file}", style="bold magenta")
+        except ImportError:
+            console.print("[!] Could not import ReportCompiler. Ensure compiler.py is in the directory.", style="bold red")
 
 if __name__ == "__main__":
     try:
