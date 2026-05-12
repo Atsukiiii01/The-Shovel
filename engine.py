@@ -30,7 +30,6 @@ class ShovelEngine:
         return results
 
     def analyze_headers(self, target):
-        """Performs active GET request trying HTTPS first, then HTTP fallback."""
         results = {}
         headers = {
             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
@@ -39,7 +38,6 @@ class ShovelEngine:
         }
         
         urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
-        
         protocols = [f"https://{target}", f"http://{target}"]
         
         for url in protocols:
@@ -119,10 +117,8 @@ class ShovelEngine:
         try:
             urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
             response = requests.get(url, headers=headers, timeout=5, verify=False, allow_redirects=False)
-            
             content_len = len(response.content)
             
-            # Strict Soft 404 filtering
             if baseline_length and abs(content_len - baseline_length) < 5: 
                 return None
 
@@ -137,11 +133,9 @@ class ShovelEngine:
         return None
 
     def active_fuzzing(self, fingerprint_data, max_threads=20):
-        """Extracts live targets, establishes per-protocol baselines, and aggressively fuzzes."""
         payloads = ['/.env', '/.git/config', '/robots.txt', '/phpinfo.php', '/server-status', '/.DS_Store']
         live_subs = [s['subdomain'] for s in fingerprint_data if s['status'] != "DEAD"]
         
-        # Step 1: Establish protocol-specific baselines
         baselines = {}
         with concurrent.futures.ThreadPoolExecutor(max_workers=max_threads) as executor:
             future_to_url = {}
@@ -163,12 +157,10 @@ class ShovelEngine:
                 except Exception:
                     baselines[url] = None
 
-        # Step 2: Queue payloads with their exact protocol baseline
         urls_to_test = []
         for sub in live_subs:
             base_http = baselines.get(f"http://{sub}/this_is_a_fake_file_shovel_test")
             base_https = baselines.get(f"https://{sub}/this_is_a_fake_file_shovel_test")
-            
             for payload in payloads:
                 urls_to_test.append((f"http://{sub}{payload}", base_http))
                 urls_to_test.append((f"https://{sub}{payload}", base_https))
@@ -176,7 +168,6 @@ class ShovelEngine:
         results = []
         if not urls_to_test: return results
 
-        # Step 3: Fuzz with Baseline Filtering
         with concurrent.futures.ThreadPoolExecutor(max_workers=max_threads) as executor:
             future_to_url = {executor.submit(self._fuzz_worker, url, baseline): url for url, baseline in urls_to_test}
             for future in concurrent.futures.as_completed(future_to_url):
@@ -186,27 +177,34 @@ class ShovelEngine:
                     
         return sorted(results, key=lambda x: (x['status'], x['url']))
 
-    def shodan_recon(self, ip, api_key):
+    def identity_osint(self, target, api_key):
+        """Queries Hunter.io for employee emails and organizational data."""
         if not api_key:
-            return {"Error": "No Shodan API key provided."}
-        url = f"https://api.shodan.io/shodan/host/{ip}?key={api_key}"
+            return {"Error": "No Hunter.io API key provided. Skipping Identity OSINT."}
+            
+        url = f"https://api.hunter.io/v2/domain-search?domain={target}&api_key={api_key}"
         try:
             response = requests.get(url, timeout=15)
             if response.status_code == 200:
-                data = response.json()
-                return {
-                    "Organization": data.get("org", "Unknown"),
-                    "Operating System": data.get("os", "Unknown"),
-                    "Open Ports": data.get("ports", []),
-                    "Vulnerabilities": data.get("vulns", [])
-                }
+                data = response.json().get("data", {})
+                emails = data.get("emails", [])
+                
+                results = []
+                for entry in emails:
+                    results.append({
+                        "email": entry.get("value", "Unknown"),
+                        "first_name": entry.get("first_name", "Unknown"),
+                        "last_name": entry.get("last_name", "Unknown"),
+                        "position": entry.get("position", "Unknown"),
+                        "department": entry.get("department", "Unknown")
+                    })
+                return {"pattern": data.get("pattern", "Unknown"), "contacts": results}
+                
             elif response.status_code == 401:
-                return {"Error": "Invalid Shodan API key."}
-            elif response.status_code == 403:
-                return {"Error": "Access Denied. Check Shodan account tier and query credits."}
-            elif response.status_code == 404:
-                return {"Error": "No data found for this IP on Shodan."}
+                return {"Error": "Invalid Hunter.io API key."}
+            elif response.status_code == 429:
+                return {"Error": "Hunter.io rate limit exceeded or free queries depleted."}
             else:
-                return {"Error": f"Shodan API returned status code: {response.status_code}"}
+                return {"Error": f"Hunter.io API returned status code: {response.status_code}"}
         except requests.exceptions.RequestException as e:
-            return {"Error": f"Shodan API request failed: {str(e)}"}
+            return {"Error": f"Hunter.io API request failed: {str(e)}"}

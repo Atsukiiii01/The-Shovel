@@ -54,7 +54,7 @@ def main():
     
     parser.add_argument("-t", "--target", help="The target domain to scan (e.g., example.com)", required=True)
     parser.add_argument("-o", "--output", help="Export results to a file (currently supports 'json')", choices=["json"], required=False)
-    parser.add_argument("-s", "--shodan", help="Shodan API Key for passive infrastructure mapping", required=False)
+    parser.add_argument("-H", "--hunter", help="Hunter.io API Key for Human/Identity OSINT extraction", required=False)
     
     args = parser.parse_args()
     target = args.target
@@ -69,7 +69,7 @@ def main():
             
     console.print(f"[+] Target Validated: {target} resolves to {target_ip}", style="bold green")
 
-    with console.status(f"[bold green]Executing Mass Fingerprinting & High-Value Path Fuzzing...", spinner="bouncingBar"):
+    with console.status(f"[bold green]Executing Multi-Layer Reconnaissance & Identity OSINT...", spinner="bouncingBar"):
         db = DatabaseManager()
         engine = ShovelEngine()
         
@@ -81,9 +81,9 @@ def main():
         fingerprint_data = engine.mass_fingerprint(subdomains)
         fuzzer_data = engine.active_fuzzing(fingerprint_data)
         
-        shodan_data = None
-        if args.shodan:
-            shodan_data = engine.shodan_recon(target_ip, args.shodan)
+        identity_data = None
+        if args.hunter:
+            identity_data = engine.identity_osint(target, args.hunter)
 
     console.print(f"[+] Target locked in local database (ID: {target_id})\n", style="bold green")
 
@@ -91,16 +91,47 @@ def main():
     header_table = Table(title="[ACTIVE RECON] Server Infrastructure & Security Headers", title_style="bold yellow", border_style="yellow")
     header_table.add_column("Header Directive", style="cyan", justify="right")
     header_table.add_column("Value", style="white")
-    for key, value in header_data.items():
-        val_style = "bold red" if value == "MISSING" else "white"
-        header_table.add_row(key, f"[{val_style}]{value}[/{val_style}]")
+    if "Error" in header_data:
+        header_table.add_row("Error", f"[bold red]{header_data['Error']}[/bold red]")
+    else:
+        for key, value in header_data.items():
+            val_style = "bold red" if value == "MISSING" else "white"
+            header_table.add_row(key, f"[{val_style}]{value}[/{val_style}]")
     console.print(header_table)
     console.print("")
+
+    # --- DISPLAY IDENTITY OSINT (HUMANS) ---
+    if identity_data:
+        if "Error" in identity_data:
+            console.print(f"[bold red][!] Identity OSINT Failed: {identity_data['Error']}[/bold red]\n")
+        else:
+            contacts = identity_data.get("contacts", [])
+            pattern = identity_data.get("pattern", "Unknown")
+            
+            id_table = Table(title=f"[IDENTITY OSINT] Human Attack Surface ({len(contacts)} Contacts Discovered | Pattern: {pattern})", title_style="bold magenta", border_style="magenta")
+            id_table.add_column("Email Address", style="white")
+            id_table.add_column("First Name", style="cyan")
+            id_table.add_column("Last Name", style="cyan")
+            id_table.add_column("Position / Title", style="yellow")
+            id_table.add_column("Department", style="green")
+            
+            for c in contacts[:15]: # Show top 15 in terminal
+                id_table.add_row(
+                    str(c.get("email")), 
+                    str(c.get("first_name")), 
+                    str(c.get("last_name")), 
+                    str(c.get("position")), 
+                    str(c.get("department"))
+                )
+            console.print(id_table)
+            if len(contacts) > 15:
+                console.print(f"[italic cyan]...and {len(contacts) - 15} more contacts. Check JSON export for the full list.[/italic cyan]")
+            console.print("")
 
     # --- DISPLAY PASSIVE RECON (DORKS) ---
     for category, queries in dork_data.items():
         clean_category = category.encode('ascii', 'ignore').decode('ascii').strip()
-        dork_table = Table(title=f"[PASSIVE RECON] Category: {clean_category}", title_style="bold magenta", show_header=False, border_style="cyan")
+        dork_table = Table(title=f"[PASSIVE RECON] Category: {clean_category}", title_style="bold cyan", show_header=False, border_style="cyan")
         dork_table.add_column("Query", style="white")
         for q in queries:
             dork_table.add_row(q)
@@ -130,12 +161,9 @@ def main():
         fuzz_table.add_column("Exposed URL", style="white")
         fuzz_table.add_column("Status", style="cyan", justify="center")
         fuzz_table.add_column("Content Length", style="yellow", justify="right")
-        
         for hit in fuzzer_data:
-            # 200 OK is a critical finding. 403 Forbidden means it exists but we need bypass tactics.
             status_style = "bold red" if hit['status'] == 200 else "bold yellow"
             fuzz_table.add_row(hit['url'], f"[{status_style}]{hit['status']}[/{status_style}]", str(hit['content_length']))
-            
         console.print(fuzz_table)
         console.print("")
     else:
@@ -146,6 +174,7 @@ def main():
             "target": target,
             "ip_address": target_ip,
             "active_recon_headers": header_data,
+            "identity_osint": identity_data,
             "passive_recon_dorks": dork_data,
             "fingerprinted_subdomains": fingerprint_data,
             "fuzzer_exposures": fuzzer_data
