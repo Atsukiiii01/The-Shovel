@@ -1,0 +1,26 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "the-shovel"
+version = "1.1.0"
+description = "Concurrent OSINT Reconnaissance & Automated Reporting Engine"
+readme = "README.md"
+requires-python = ">=3.9"
+authors = [
+    { name = "Atsukiiii01" }
+]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: Other/Proprietary License",
+    "Operating System :: OS Independent",
+]
+dependencies = [
+    "requests>=2.31.0",
+    "urllib3>=2.0.0",
+    "rich>=13.0.0"
+]
+
+[project.scripts]
+shovel = "main:main"
